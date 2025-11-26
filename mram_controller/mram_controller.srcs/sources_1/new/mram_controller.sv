@@ -47,7 +47,7 @@ module mram_controller #(
     // ═══════════════════════════════════════════════════════════
     // FSM 
     // ═══════════════════════════════════════════════════════════
-    typedef enum logic {
+    typedef enum logic [1:0] {
         IDLE        = 2'b00,  
         WRITE_CYCLE = 2'b01, 
         READ_CYCLE  = 2'b10    
@@ -130,6 +130,7 @@ module mram_controller #(
         case (state)
             IDLE: begin
                 write_done = 1'b1;
+                read_done  = 1'b1;
             end
             
             WRITE_CYCLE: begin

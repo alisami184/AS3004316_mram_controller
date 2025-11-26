@@ -88,9 +88,7 @@ module mram_controller_tb;
     // Test Stimulus
     // ═══════════════════════════════════════════════════════════
     initial begin
-        $dumpfile("mram_controller.vcd");
-        $dumpvars(0, mram_controller_tb);
-        
+
         // Initialize
         rst = 1;
         write_req = 0;
