@@ -1,0 +1,7 @@
+0.7
+2020.2
+Nov  8 2024
+22:36:55
+/home/ali/ressources/mram_controller/mram_controller/mram_controller.sim/sim_1/behav/xsim/glbl.v,1724786425,verilog,,,,glbl,,uvm,,,,,,
+/home/ali/ressources/mram_controller/mram_controller/mram_controller.srcs/sim_1/new/mram_controller_tb.sv,1764166134,systemVerilog,,,,mram_controller_tb,,uvm,,,,,,
+/home/ali/ressources/mram_controller/mram_controller/mram_controller.srcs/sources_1/new/mram_controller.sv,1764168680,systemVerilog,,/home/ali/ressources/mram_controller/mram_controller/mram_controller.srcs/sim_1/new/mram_controller_tb.sv,,mram_controller,,uvm,,,,,,
