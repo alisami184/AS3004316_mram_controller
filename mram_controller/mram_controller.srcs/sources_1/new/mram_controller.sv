@@ -35,11 +35,12 @@ module mram_controller #(
     localparam real WRITE_CYCLE_NS    = 35.0;  // tAVAV
 
     localparam int W_PULSE_CYCLES = int'($ceil(ADDR_TO_W_HIGH_NS / CLK_PERIOD_NS));
-    localparam int TOTAL_CYCLES = int'($ceil(WRITE_CYCLE_NS / CLK_PERIOD_NS));
+    localparam int WRITE_TOTAL_CYCLES = int'($ceil(WRITE_CYCLE_NS / CLK_PERIOD_NS));
 
     // READ timings
     localparam real READ_G_LOW_NS  = 15.0;   // tGLQV
     localparam real READ_CYCLE_NS  = 35.0;   // tAVAV
+    
     localparam int READ_G_CYCLES     = int'($ceil(READ_G_LOW_NS / CLK_PERIOD_NS));
     localparam int READ_TOTAL_CYCLES = int'($ceil(READ_CYCLE_NS / CLK_PERIOD_NS));
     
@@ -47,10 +48,12 @@ module mram_controller #(
     // ═══════════════════════════════════════════════════════════
     // FSM 
     // ═══════════════════════════════════════════════════════════
-    typedef enum logic [1:0] {
-        IDLE        = 2'b00,  
-        WRITE_CYCLE = 2'b01, 
-        READ_CYCLE  = 2'b10    
+    typedef enum logic [2:0] {
+        IDLE       = 3'b000,  
+        WRITE      = 3'b001,
+        WRITE_DONE = 3'b010,
+        READ       = 3'b011,
+        READ_DONE  = 3'b100
     } state_t;
     
     state_t state;
@@ -68,59 +71,101 @@ module mram_controller #(
     // ═══════════════════════════════════════════════════════════
     // FSM Sequential Logic
     // ═══════════════════════════════════════════════════════════
-    always_ff @(posedge clk) begin
-        if (rst) begin
+    always_ff @(posedge clk or negedge rst) begin
+        if (!rst) begin
             state <= IDLE;
             cycle_count <= '0;
             data_reg <= '0;
             addr_reg <= '0;
+            rdata <= 16'h0000;
         end else begin
             case (state)
                 IDLE: begin
+                    cycle_count <= '0;
+                    
                     if (write_req) begin
                         data_reg <= wdata;
                         addr_reg <= addr_in;
-                        cycle_count <= '0;
-                        state <= WRITE_CYCLE;
+                        state <= WRITE;
                     end
                     else if (read_req) begin
                         addr_reg <= addr_in;
-                        cycle_count <= '0;
-                        state <= READ_CYCLE;
+                        state <= READ;
                     end
                 end
                 
-                WRITE_CYCLE: begin
+                // ┌─────────────────────────────────────────────┐
+                // │ WRITE STATE                                 │
+                // │ - Cycle 0 to W_PULSE_CYCLES: W# LOW         │
+                // │ - After: W# HIGH (recovery)                 │
+                // │ - Total: WRITE_TOTAL_CYCLES                 │
+                // └─────────────────────────────────────────────┘
+                WRITE: begin
                     cycle_count <= cycle_count + 1;
                     
-                    // Complete write cycle (W# pulse + recovery)
-                    if (cycle_count >= TOTAL_CYCLES - 1) begin
-                        state <= IDLE;
+                    if (cycle_count >= WRITE_TOTAL_CYCLES - 1) begin
+                        state <= WRITE_DONE;
                     end
                 end
-
-                READ_CYCLE: begin
-                    cycle_count <= cycle_count + 1;
-                    // Capturer data pendant que G# est LOW
-                    if (cycle_count == READ_G_CYCLES - 1)
-                        rdata <= dq;
-                    if (cycle_count >= READ_TOTAL_CYCLES - 1) begin
-                        state <= IDLE;
+                
+                WRITE_DONE: begin
+                    if (read_req) begin
+                        addr_reg <= addr_in;
+                        cycle_count <= '0;
+                        state <= READ;
+                    end else if (write_req) begin
+                        data_reg <= wdata;
+                        addr_reg <= addr_in;
+                        state <= WRITE;
                     end
+                    else
+                        state <= IDLE;
+                end
+
+                // ┌─────────────────────────────────────────────┐
+                // │ READ STATE                                  │
+                // │ - Cycle 0 to READ_G_CYCLES: G# LOW          │
+                // │ - Capture data when stable                  │
+                // │ - Total: READ_TOTAL_CYCLES                  │
+                // └─────────────────────────────────────────────┘
+                READ: begin
+                    cycle_count <= cycle_count + 1;
+                    
+                    // Capture data after G# has been low
+                    if (cycle_count == READ_G_CYCLES) begin
+                        rdata <= dq;
+                    end
+                    
+                    if (cycle_count >= READ_TOTAL_CYCLES - 1) begin
+                        state <= READ_DONE;
+                    end
+                end
+                
+                READ_DONE: begin
+                    if (write_req) begin 
+                        data_reg <= wdata;
+                        addr_reg <= addr_in;
+                        cycle_count <= '0;
+                        state <= WRITE;
+                    end else if (read_req) begin
+                        addr_reg <= addr_in;
+                        state <= READ;
+                    end else
+                        state <= IDLE;
                 end
             endcase
         end
     end
     
     // ═══════════════════════════════════════════════════════════
-    // Output Logic - THE CRITICAL PART
+    // Output Logic
     // ═══════════════════════════════════════════════════════════
     always_comb begin
         // Defaults
         e_n = 1'b1;
         w_n = 1'b1;
         g_n = 1'b1;
-        ub_n = 1'b0;
+        ub_n = 1'b0;  // Both bytes enabled
         lb_n = 1'b0;
         addr = addr_reg;
         drive_data = 1'b0;
@@ -129,55 +174,41 @@ module mram_controller #(
         
         case (state)
             IDLE: begin
-                write_done = 1'b1;
-                read_done  = 1'b1;
+                // All signals default
             end
             
-            WRITE_CYCLE: begin
-                // ┌─────────────────────────────────────────────┐
-                // │ Phase 1: W# LOW (write pulse)               │
-                // │ Duration: tAVWH = 18ns minimum              │
-                // │ - Address valid from cycle 0                │
-                // │ - Data valid from cycle 0                   │
-                // │ - E# LOW to enable chip                     │
-                // │ - W# LOW to write                           │
-                // │ - G# HIGH (output disabled for write)       │
-                // └─────────────────────────────────────────────┘
+            WRITE: begin
+                e_n = 1'b0;        // Chip enabled
+                g_n = 1'b1;        // Output disabled
+                drive_data = 1'b1; // Drive DQ bus
+                
+                // W# LOW for first W_PULSE_CYCLES, then HIGH
                 if (cycle_count < W_PULSE_CYCLES) begin
-                    e_n = 1'b0;        // Chip enabled
-                    w_n = 1'b0;        // ⚡ WRITE ACTIVE
-                    g_n = 1'b1;        // Output disabled
-                    drive_data = 1'b1; // Drive DQ bus with write data
-                end
-                // ┌─────────────────────────────────────────────┐
-                // │ Phase 2: W# HIGH (recovery)                 │
-                // │ Duration: tWHAX = 12ns minimum              │
-                // │ Plus extra time to meet tAVAV = 35ns total  │
-                // │ - Address still valid (tWHAX requirement)   │
-                // │ - Data held stable (tWHDX = 0ns OK)         │
-                // │ - E# can stay LOW or go HIGH                │
-                // │ - W# HIGH (write complete)                  │
-                // └─────────────────────────────────────────────┘
-                else begin
-                    e_n = 1'b1;        // Keep chip enabled
-                    w_n = 1'b1;        // Write complete
-                    g_n = 1'b1;        // Output still disabled
-                    drive_data = 1'b1; // Hold data stable (tWHDX=0 but good practice)
+                    w_n = 1'b0;    // Write pulse
+                end else begin
+                    w_n = 1'b1;    // Recovery
                 end
             end
-            READ_CYCLE: begin
+            
+            WRITE_DONE: begin
+                write_done = 1'b1;
+            end
+            
+            READ: begin
+                e_n = 1'b0;        // Chip enabled
+                w_n = 1'b1;        // Not writing
+                drive_data = 1'b0; // Don't drive DQ
+                
+                // G# LOW for first READ_G_CYCLES, then HIGH
                 if (cycle_count < READ_G_CYCLES) begin
-                    e_n = 1'b0;        // Chip enabled
-                    w_n = 1'b1;        // Not writing
-                    g_n = 1'b0;        // ⚡ READ ACTIVE
-                    drive_data = 1'b0; // Do not drive DQ bus
+                    g_n = 1'b0;    // Output enabled
+                end else begin
+                    g_n = 1'b1;    // Output disabled
                 end
-                else begin
-                    e_n = 1'b1;        
-                    w_n = 1'b1;        
-                    g_n = 1'b1;        // Read complete
-                    drive_data = 1'b0; 
-                end
+            end
+            
+            READ_DONE: begin
+                read_done = 1'b1;
             end
         endcase
     end
