@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module mram_controller #(
-    parameter CLK_FREQ_MHZ = 100
+    parameter CLK_FREQ_MHZ = 50
 )(
     input  logic        clk,
     input  logic        rst,
@@ -82,7 +82,6 @@ module mram_controller #(
             case (state)
                 IDLE: begin
                     cycle_count <= '0;
-                    
                     if (write_req) begin
                         data_reg <= wdata;
                         addr_reg <= addr_in;

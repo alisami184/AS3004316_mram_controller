@@ -1,4 +1,7 @@
-module uart_rx (
+module uart_rx #(
+    parameter CLK_FREQ = 100_000_000,
+    parameter BAUD_RATE = 115200
+    )(
     input   logic       clk,
     input   logic       reset,
     input   logic       rx,
@@ -6,8 +9,6 @@ module uart_rx (
     output  logic       data_valid
 );
 
-    localparam CLK_FREQ = 100_000_000;
-    localparam BAUD_RATE = 115200;
     localparam TICKS_PER_BIT = CLK_FREQ / BAUD_RATE;
     localparam TICKS_HALF_BIT = TICKS_PER_BIT / 2;
 

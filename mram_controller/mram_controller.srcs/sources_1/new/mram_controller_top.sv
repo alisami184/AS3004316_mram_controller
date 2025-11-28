@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
-module mram_controller_top (
+module mram_controller_top #(
+    parameter CLK_FREQ_MHZ = 50
+)(
     // Clock and Reset
     input  logic        clk,
     input  logic        cpu_resetn,
@@ -23,208 +25,21 @@ module mram_controller_top (
 );
 
     // ═══════════════════════════════════════════════════════════
-    // Reset synchronization
+    // Reset
     // ═══════════════════════════════════════════════════════════
     logic rst;
-    assign rst = ~cpu_resetn;  // Active high reset
+    assign rst = ~cpu_resetn;  // Active high
     
     // ═══════════════════════════════════════════════════════════
-    // UART signals
+    // UART RX
     // ═══════════════════════════════════════════════════════════
     logic [7:0] rx_data;
     logic       rx_valid;
-    logic       rx_error;
     
-    logic [7:0] tx_data;
-    logic       tx_send;
-    logic       tx_busy;
-    
-    // ═══════════════════════════════════════════════════════════
-    // MRAM Controller signals
-    // ═══════════════════════════════════════════════════════════
-    logic [15:0] mram_wdata;
-    logic [17:0] mram_addr_in;
-    logic        mram_write_req;
-    logic        mram_read_req;
-    logic        mram_write_done;
-    logic        mram_read_done;
-    logic [15:0] mram_rdata;
-    
-    // ═══════════════════════════════════════════════════════════
-    // UART Protocol FSM
-    // ═══════════════════════════════════════════════════════════
-    // Protocol:
-    // WRITE: 'W' + ADDR_H + ADDR_M + ADDR_L + DATA_H + DATA_L (6 bytes)
-    // READ:  'R' + ADDR_H + ADDR_M + ADDR_L (4 bytes) -> reply DATA_H + DATA_L
-    
-    typedef enum logic [3:0] {
-        IDLE,
-        CMD_WRITE_ADDR_H,
-        CMD_WRITE_ADDR_M,
-        CMD_WRITE_ADDR_L,
-        CMD_WRITE_DATA_H,
-        CMD_WRITE_DATA_L,
-        EXEC_WRITE,
-        CMD_READ_ADDR_H,
-        CMD_READ_ADDR_M,
-        CMD_READ_ADDR_L,
-        EXEC_READ,
-        SEND_DATA_H,
-        SEND_DATA_L
-    } state_t;
-    
-    state_t state;
-    
-    logic [17:0] addr_buffer;
-    logic [15:0] data_buffer;
-    
-    // ═══════════════════════════════════════════════════════════
-    // UART Command FSM
-    // ═══════════════════════════════════════════════════════════
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            state <= IDLE;
-            mram_write_req <= 0;
-            mram_read_req <= 0;
-            tx_send <= 0;
-            addr_buffer <= 0;
-            data_buffer <= 0;
-            led <= 8'h00;
-        end else begin
-            // Default: clear requests (but NOT tx_send, managed per state)
-            mram_write_req <= 0;
-            mram_read_req <= 0;
-            
-            case (state)
-                IDLE: begin
-                    tx_send <= 0;  // Ensure tx_send is low
-                    if (rx_valid) begin
-                        case (rx_data)
-                            8'h57, 8'h77: begin // 'W' or 'w'
-                                state <= CMD_WRITE_ADDR_H;
-                                led <= 8'h01;  // Indicate write command
-                            end
-                            8'h52, 8'h72: begin // 'R' or 'r'
-                                state <= CMD_READ_ADDR_H;
-                                led <= 8'h02;  // Indicate read command
-                            end
-                            default: state <= IDLE;
-                        endcase
-                    end
-                end
-                
-                // ───────── WRITE COMMAND ─────────
-                CMD_WRITE_ADDR_H: begin
-                    if (rx_valid) begin
-                        addr_buffer[17:16] <= rx_data[1:0];
-                        state <= CMD_WRITE_ADDR_M;
-                    end
-                end
-                
-                CMD_WRITE_ADDR_M: begin
-                    if (rx_valid) begin
-                        addr_buffer[15:8] <= rx_data;
-                        state <= CMD_WRITE_ADDR_L;
-                    end
-                end
-                
-                CMD_WRITE_ADDR_L: begin
-                    if (rx_valid) begin
-                        addr_buffer[7:0] <= rx_data;
-                        state <= CMD_WRITE_DATA_H;
-                    end
-                end
-                
-                CMD_WRITE_DATA_H: begin
-                    if (rx_valid) begin
-                        data_buffer[15:8] <= rx_data;
-                        state <= CMD_WRITE_DATA_L;
-                    end
-                end
-                
-                CMD_WRITE_DATA_L: begin
-                    if (rx_valid) begin
-                        data_buffer[7:0] <= rx_data;
-                        state <= EXEC_WRITE;
-                    end
-                end
-                
-                EXEC_WRITE: begin
-                    mram_addr_in <= addr_buffer;
-                    mram_wdata <= data_buffer;
-                    mram_write_req <= 1;
-                    
-                    if (mram_write_done) begin
-                        state <= IDLE;
-                        led <= 8'h0F;  // Write complete
-                    end
-                end
-                
-                // ───────── READ COMMAND ─────────
-                CMD_READ_ADDR_H: begin
-                    if (rx_valid) begin
-                        addr_buffer[17:16] <= rx_data[1:0];
-                        state <= CMD_READ_ADDR_M;
-                    end
-                end
-                
-                CMD_READ_ADDR_M: begin
-                    if (rx_valid) begin
-                        addr_buffer[15:8] <= rx_data;
-                        state <= CMD_READ_ADDR_L;
-                    end
-                end
-                
-                CMD_READ_ADDR_L: begin
-                    if (rx_valid) begin
-                        addr_buffer[7:0] <= rx_data;
-                        state <= EXEC_READ;
-                    end
-                end
-                
-                EXEC_READ: begin
-                    mram_addr_in <= addr_buffer;
-                    mram_read_req <= 1;
-                    
-                    if (mram_read_done) begin
-                        data_buffer <= mram_rdata;
-                        state <= SEND_DATA_H;
-                    end
-                end
-                
-                SEND_DATA_H: begin
-                    if (!tx_busy) begin
-                        tx_data <= data_buffer[15:8];
-                        tx_send <= 1;
-                        state <= SEND_DATA_L;
-                    end
-                end
-                
-                SEND_DATA_L: begin
-                    if (!tx_busy) begin
-                        tx_data <= data_buffer[7:0];
-                        tx_send <= 1;
-                        state <= IDLE;
-                        led <= 8'hF0;  // Read complete
-                    end
-                end
-                
-                default: state <= IDLE;
-            endcase
-            
-            // Show error on LEDs
-            if (rx_error) begin
-                led <= 8'hAA;
-            end
-        end
-    end
-    
-    // ═══════════════════════════════════════════════════════════
-    // Module Instantiations
-    // ═══════════════════════════════════════════════════════════
-    
-    // UART RX
-    uart_rx u_uart_rx (
+    uart_rx #(
+        .CLK_FREQ(CLK_FREQ_MHZ * 1_000_000),
+        .BAUD_RATE(115200)
+    ) u_uart_rx (
         .clk        (clk),
         .reset      (rst),
         .rx         (uart_rx),
@@ -232,29 +47,28 @@ module mram_controller_top (
         .data_valid (rx_valid)
     );
     
-    // UART TX
-    uart_tx u_uart_tx (
-        .clk        (clk),
-        .reset      (rst),
-        .data_in    (tx_data),
-        .send       (tx_send),
-        .tx         (uart_tx),
-        .busy       (tx_busy)
-    );
+    assign uart_tx = 1'b1;  // Pas de TX pour l'instant
     
-    // MRAM Controller
+    // ═══════════════════════════════════════════════════════════
+    // MRAM Controller Interface
+    // ═══════════════════════════════════════════════════════════
+    logic [15:0] mram_wdata;
+    logic [17:0] mram_addr_in;
+    logic        mram_write_req;
+    logic        mram_write_done;
+    
     mram_controller #(
-        .CLK_FREQ_MHZ(100)
-    ) u_mram_ctrl (
+        .CLK_FREQ_MHZ(CLK_FREQ_MHZ)
+    ) u_mram (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (~rst),
         .wdata      (mram_wdata),
         .addr_in    (mram_addr_in),
         .write_req  (mram_write_req),
-        .read_req   (mram_read_req),
+        .read_req   (1'b0),           // Pas de read
         .write_done (mram_write_done),
-        .read_done  (mram_read_done),
-        .rdata      (mram_rdata),
+        .read_done  (),               // Non connecté
+        .rdata      (),               // Non connecté
         .e_n        (e),
         .w_n        (w),
         .g_n        (g),
@@ -263,5 +77,107 @@ module mram_controller_top (
         .lb_n       (lb),
         .dq         (dq)
     );
+    
+    // ═══════════════════════════════════════════════════════════
+    // FSM Simple pour WRITE
+    // ═══════════════════════════════════════════════════════════
+    // Protocole: 'W' + ADDR_H + ADDR_L + DATA_H + DATA_L (5 bytes)
+    
+    typedef enum logic [2:0] {
+        IDLE,
+        GET_ADDR_H,
+        GET_ADDR_L,
+        GET_DATA_H,
+        GET_DATA_L,
+        EXEC_WRITE,
+        WRITE_DONE
+    } state_t;
+    
+    state_t state;
+    
+    logic [17:0] addr_buffer;
+    logic [15:0] data_buffer;
+    logic        req_sent;  // Track if pulse was sent
+    
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            state <= IDLE;
+            mram_write_req <= 0;
+            addr_buffer <= 0;
+            data_buffer <= 0;
+            req_sent <= 0;
+            led <= 8'h00;
+        end else begin
+            // Clear request by default
+            mram_write_req <= 0;
+            
+            case (state)
+                IDLE: begin
+                    if (rx_valid) begin
+                        if (rx_data == 8'h57 || rx_data == 8'h77) begin  // 'W' ou 'w'
+                            state <= GET_ADDR_H;
+                            led <= 8'h01;  // Command reçu
+                        end
+                    end
+                end
+                
+                GET_ADDR_H: begin
+                    if (rx_valid) begin
+                        addr_buffer[17:8] <= {8'h00, rx_data[1:0]};
+                        state <= GET_ADDR_L;
+                        led <= 8'h02;
+                    end
+                end
+                
+                GET_ADDR_L: begin
+                    if (rx_valid) begin
+                        addr_buffer[7:0] <= rx_data;
+                        state <= GET_DATA_H;
+                        led <= 8'h03;
+                    end
+                end
+                
+                GET_DATA_H: begin
+                    if (rx_valid) begin
+                        data_buffer[15:8] <= rx_data;
+                        state <= GET_DATA_L;
+                        led <= 8'h04;
+                    end
+                end
+                
+                GET_DATA_L: begin
+                    if (rx_valid) begin
+                        data_buffer[7:0] <= rx_data;
+                        state <= EXEC_WRITE;
+                        led <= 8'h05;
+                    end
+                end
+                
+                EXEC_WRITE: begin
+                    mram_addr_in <= addr_buffer;
+                    mram_wdata <= data_buffer;
+                    
+                    // Generate single-cycle pulse
+                    if (!req_sent) begin
+                        mram_write_req <= 1;
+                        req_sent <= 1;
+                        led <= 8'h0F;  // Write en cours
+                    end
+                    
+                    if (mram_write_done) begin
+                        state <= WRITE_DONE;
+                    end
+                end
+                
+                WRITE_DONE: begin
+                    req_sent <= 0;  // Reset flag for next write
+                    led <= 8'hFF;   // Write terminé!
+                    state <= IDLE;
+                end
+                
+                default: state <= IDLE;
+            endcase
+        end
+    end
 
 endmodule
