@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module mram_controller #(
-    parameter CLK_FREQ_MHZ = 50
+    parameter CLK_FREQ_MHZ = 100
 )(
     input  logic        clk,
     input  logic        rst,
@@ -32,14 +32,14 @@ module mram_controller #(
     
     // WRITE timings
     localparam real ADDR_TO_W_HIGH_NS = 18.0;  // tAVWH
-    localparam real WRITE_CYCLE_NS    = 35.0;  // tAVAV
+    localparam real WRITE_CYCLE_NS    = 40.0;  // tAVAV
 
     localparam int W_PULSE_CYCLES = int'($ceil(ADDR_TO_W_HIGH_NS / CLK_PERIOD_NS));
     localparam int WRITE_TOTAL_CYCLES = int'($ceil(WRITE_CYCLE_NS / CLK_PERIOD_NS));
 
     // READ timings
-    localparam real READ_G_LOW_NS  = 15.0;   // tGLQV
-    localparam real READ_CYCLE_NS  = 35.0;   // tAVAV
+    localparam real READ_G_LOW_NS  = 35.0;   // tGLQV
+    localparam real READ_CYCLE_NS  = 40.0;   // tAVAV
     
     localparam int READ_G_CYCLES     = int'($ceil(READ_G_LOW_NS / CLK_PERIOD_NS));
     localparam int READ_TOTAL_CYCLES = int'($ceil(READ_CYCLE_NS / CLK_PERIOD_NS));
@@ -71,12 +71,12 @@ module mram_controller #(
     // ═══════════════════════════════════════════════════════════
     // FSM Sequential Logic
     // ═══════════════════════════════════════════════════════════
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
             state <= IDLE;
             cycle_count <= '0;
             data_reg <= '0;
-            addr_reg <= '0;
+            addr_reg <= 18'h3FFFF;
             rdata <= 16'h0000;
         end else begin
             case (state)
@@ -116,6 +116,7 @@ module mram_controller #(
                         data_reg <= wdata;
                         addr_reg <= addr_in;
                         state <= WRITE;
+                        cycle_count <= '0;
                     end
                     else
                         state <= IDLE;
@@ -131,7 +132,7 @@ module mram_controller #(
                     cycle_count <= cycle_count + 1;
                     
                     // Capture data after G# has been low
-                    if (cycle_count == READ_G_CYCLES) begin
+                    if (cycle_count == 3) begin
                         rdata <= dq;
                     end
                     
@@ -148,6 +149,7 @@ module mram_controller #(
                         state <= WRITE;
                     end else if (read_req) begin
                         addr_reg <= addr_in;
+                        cycle_count <= '0;
                         state <= READ;
                     end else
                         state <= IDLE;
@@ -180,6 +182,8 @@ module mram_controller #(
                 e_n = 1'b0;        // Chip enabled
                 g_n = 1'b1;        // Output disabled
                 drive_data = 1'b1; // Drive DQ bus
+                ub_n = 1'b0;  // Both bytes enabled
+                lb_n = 1'b0;
                 
                 // W# LOW for first W_PULSE_CYCLES, then HIGH
                 if (cycle_count < W_PULSE_CYCLES) begin
@@ -196,6 +200,8 @@ module mram_controller #(
             READ: begin
                 e_n = 1'b0;        // Chip enabled
                 w_n = 1'b1;        // Not writing
+                ub_n = 1'b0;  // Both bytes enabled
+                lb_n = 1'b0;
                 drive_data = 1'b0; // Don't drive DQ
                 
                 // G# LOW for first READ_G_CYCLES, then HIGH

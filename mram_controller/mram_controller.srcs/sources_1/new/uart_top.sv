@@ -9,7 +9,6 @@ module uart_echo (
     logic       reset;
     logic [7:0] rx_data;
     logic       rx_valid;
-    logic       rx_error;
     logic       tx_busy;
 
     logic [7:0] tx_data;
@@ -42,10 +41,6 @@ module uart_echo (
                             state   <= SEND;
                         end
                     end
-
-                    if (rx_error) begin
-                        led <= 8'hAA;
-                    end
                 end
 
                 SEND: begin
@@ -66,9 +61,8 @@ module uart_echo (
         .reset(reset),
         .rx(uart_rx),
         .data_out(rx_data),
-        .data_valid(rx_valid),
-        .error(rx_error)
-    );
+        .data_valid(rx_valid)    
+        );
 
     // Instance UART TX
     uart_tx transmitter (

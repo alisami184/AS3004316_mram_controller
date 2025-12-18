@@ -5,8 +5,8 @@
 
 
 ## Clock Signal
-set_property -dict { PACKAGE_PIN R4    IOSTANDARD LVCMOS33 } [get_ports { clk }]; #IO_L13P_T2_MRCC_34 Sch=sysclk
-create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports clk]
+set_property -dict { PACKAGE_PIN R4    IOSTANDARD LVCMOS33 } [get_ports { sys_clk_i }]; #IO_L13P_T2_MRCC_34 Sch=sysclk
+create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports sys_clk_i]
 
 ## FMC Transceiver clocks (Must be set to value provided by Mezzanine card, currently set to 156.25 MHz)
 ## Note: This clock is attached to a MGTREFCLK pin
@@ -35,7 +35,7 @@ set_property -dict { PACKAGE_PIN Y13   IOSTANDARD LVCMOS25 } [get_ports { led[7]
 #set_property -dict { PACKAGE_PIN C22 IOSTANDARD LVCMOS12 } [get_ports { btnl }]; #IO_L20P_T3_16 Sch=btnl
 #set_property -dict { PACKAGE_PIN D14 IOSTANDARD LVCMOS12 } [get_ports { btnr }]; #IO_L6P_T0_16 Sch=btnr
 #set_property -dict { PACKAGE_PIN F15 IOSTANDARD LVCMOS12 } [get_ports { btnu }]; #IO_0_16 Sch=btnu
-set_property -dict { PACKAGE_PIN G4  IOSTANDARD LVCMOS15 } [get_ports { cpu_resetn }]; #IO_L12N_T1_MRCC_35 Sch=cpu_resetn
+set_property -dict { PACKAGE_PIN G4  IOSTANDARD LVCMOS15 } [get_ports { sys_rst }]; #IO_L12N_T1_MRCC_35 Sch=cpu_resetn
 
 
 ## Switches
@@ -226,10 +226,10 @@ set_property -dict { PACKAGE_PIN V18   IOSTANDARD LVCMOS33 } [get_ports { uart_r
 #set_property -dict { PACKAGE_PIN V5    IOSTANDARD LVCMOS33 } [get_ports { sda }]; #IO_L16N_T2_34 Sch=sda
 
 
-## Voltage Adjust
-#set_property -dict { PACKAGE_PIN AA13  IOSTANDARD LVCMOS25 } [get_ports { set_vadj[0] }]; #IO_L3P_T0_DQS_13 Sch=set_vadj[0]
-#set_property -dict { PACKAGE_PIN AB17  IOSTANDARD LVCMOS25 } [get_ports { set_vadj[1] }]; #IO_L2N_T0_13 Sch=set_vadj[1]
-#set_property -dict { PACKAGE_PIN V14   IOSTANDARD LVCMOS25 } [get_ports { vadj_en }]; #IO_L13N_T2_MRCC_13 Sch=vadj_en
+# Voltage Adjust
+set_property -dict { PACKAGE_PIN AA13  IOSTANDARD LVCMOS25 } [get_ports { set_vadj[0] }]; #IO_L3P_T0_DQS_13 Sch=set_vadj[0]
+set_property -dict { PACKAGE_PIN AB17  IOSTANDARD LVCMOS25 } [get_ports { set_vadj[1] }]; #IO_L2N_T0_13 Sch=set_vadj[1]
+set_property -dict { PACKAGE_PIN V14   IOSTANDARD LVCMOS25 } [get_ports { vadj_en }]; #IO_L13N_T2_MRCC_13 Sch=vadj_en
 
 
 ## FMC
@@ -265,7 +265,7 @@ set_property -dict { PACKAGE_PIN L20   IOSTANDARD LVCMOS12 } [get_ports { dq[8] 
 set_property -dict { PACKAGE_PIN L19   IOSTANDARD LVCMOS12 } [get_ports { mram_addr[14] }]; #IO_L14P_T2_SRCC_15 Sch=fmc_la_p[12]
 set_property -dict { PACKAGE_PIN J17   IOSTANDARD LVCMOS12 } [get_ports { fmc_la_n[13] }]; #IO_L21N_T3_DQS_A18_15 Sch=fmc_la_n[13]
 set_property -dict { PACKAGE_PIN K17   IOSTANDARD LVCMOS12 } [get_ports { fmc_la_p[13] }]; #IO_L21P_T3_DQS_15 Sch=fmc_la_p[13]
-set_property -dict { PACKAGE_PIN H22   IOSTANDARD LVCMOS12 } [get_ports { fmc_la_n[14] }]; #IO_L7N_T1_AD2N_15 Sch=fmc_la_n[14]
+set_property -dict { PACKAGE_PIN H22   IOSTANDARD LVCMOS12 } [get_ports { clk_out }]; #IO_L7N_T1_AD2N_15 Sch=fmc_la_n[14]
 set_property -dict { PACKAGE_PIN J22   IOSTANDARD LVCMOS12 } [get_ports { fmc_la_p[14] }]; #IO_L7P_T1_AD2P_15 Sch=fmc_la_p[14]
 set_property -dict { PACKAGE_PIN K16   IOSTANDARD LVCMOS12 } [get_ports { dq[13] }]; #IO_L23N_T3_FWE_B_15 Sch=fmc_la_n[15]
 set_property -dict { PACKAGE_PIN L16   IOSTANDARD LVCMOS12 } [get_ports { dq[12] }]; #IO_L23P_T3_FOE_B_15 Sch=fmc_la_p[15]

@@ -1,4 +1,7 @@
-module uart_tx (
+module uart_tx #(
+parameter CLK_FREQ = 100_000_000,
+parameter BAUD_RATE = 115200
+)(
     input   logic       clk,
     input   logic       reset,
     input   logic [7:0] data_in,
@@ -8,8 +11,6 @@ module uart_tx (
 );
 
     // UART parameters
-    localparam CLK_FREQ = 100_000_000;
-    localparam BAUD_RATE = 115200;
     localparam TICKS_PER_BIT = CLK_FREQ / BAUD_RATE; // ~868 per ticks
 
     // States of the state machine

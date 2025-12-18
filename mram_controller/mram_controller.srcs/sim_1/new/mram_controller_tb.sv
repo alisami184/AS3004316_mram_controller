@@ -5,7 +5,7 @@ module mram_controller_tb;
     // ═══════════════════════════════════════════════════════════
     // Testbench Parameters
     // ═══════════════════════════════════════════════════════════
-    parameter CLK_FREQ_MHZ = 50;
+    parameter CLK_FREQ_MHZ = 100;
     parameter CLK_PERIOD = 1000.0 / CLK_FREQ_MHZ;
     
     // ═══════════════════════════════════════════════════════════
